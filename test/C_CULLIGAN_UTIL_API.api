@@ -1,3 +1,19 @@
+-----------------------------------------------------------------------------
+--
+--  Logical unit: CCulliganUtil
+--  Type:         Utility
+--  Component:    CMOD
+--
+--  Template:     3.0
+--  Built by:     IFS Developer Studio
+--
+--  NOTE! Do not edit!! This file is completely generated and will be
+--        overwritten next time the corresponding model is saved.
+-----------------------------------------------------------------------------
+
+PROMPT Creating C_Culligan_Util_API specification
+
+-- [IFS COMPLETE BLOCK PACKAGE C_Culligan_Util_API]
 CREATE OR REPLACE PACKAGE C_Culligan_Util_API IS
 
 module_                   CONSTANT VARCHAR2(6)      := 'CMOD';
@@ -50,14 +66,14 @@ PROCEDURE Assign_Resource(
 
 PROCEDURE Create_Work_Task (
     wo_no_        IN NUMBER,
-    description_  IN VARCHAR2,
-    site_         IN VARCHAR2,
+    description_  IN VARCHAR2, 
+    site_         IN VARCHAR2, 
     act_start_    IN DATE,
     act_finish_   IN DATE,
-    obj_id_       IN VARCHAR2,
+    obj_id_       IN VARCHAR2, 
     priority_     IN VARCHAR2,
     action_id_    IN VARCHAR2,
-    action_taken_ IN VARCHAR2,
+    action_taken_ IN VARCHAR2, 
     cause_        IN VARCHAR2);
 
 PROCEDURE Create_Work_Task_New (
@@ -87,3 +103,7 @@ PROCEDURE Init;
 
 END C_Culligan_Util_API;
 -- [END IFS COMPLETE BLOCK]
+/
+SHOW ERROR
+
+
