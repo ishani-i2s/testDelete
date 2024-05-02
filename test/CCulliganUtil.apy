@@ -1,0 +1,1069 @@
+-----------------------------------------------------------------------------
+--
+--  Logical unit: CCulliganUtil
+--  Type:         Utility
+--  Component:    CMOD
+--
+--  Template:     3.0
+--  Built by:     IFS Developer Studio
+--
+--  NOTE! Do not edit!! This file is completely generated and will be
+--        overwritten next time the corresponding model is saved.
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+-------------------- API PACKAGE IMPLEMENTATION -----------------------------
+-----------------------------------------------------------------------------
+
+PROMPT Creating C_Culligan_Util_API implementation
+
+-- [IFS COMPLETE BLOCK PACKAGEBODY C_Culligan_Util_API]
+CREATE OR REPLACE PACKAGE BODY C_Culligan_Util_API IS
+
+-----------------------------------------------------------------------------
+-------------------- PRIVATE DECLARATIONS -----------------------------------
+-----------------------------------------------------------------------------
+
+
+-----------------------------------------------------------------------------
+-------------------- LU  NEW METHODS ----------------------------------------
+-----------------------------------------------------------------------------
+
+PROCEDURE Create_Fault_Report(
+   priority_ VARCHAR2)
+IS
+   
+   PROCEDURE Core(
+      priority_ VARCHAR2)
+   IS 
+      info_                VARCHAR2(32000);
+      objid_               VARCHAR2(1000); 
+      objversion_          VARCHAR2(1000); 
+      attr_                VARCHAR2(32000);
+      attr_cf_             VARCHAR2(32000);
+      cf_info_             VARCHAR2(32000);
+      cf_objid_            VARCHAR2(1000); 
+      cf_objversion_       VARCHAR2(1000); 
+      cf_attr_             VARCHAR2(32000);
+      reported_by_         VARCHAR2(100);
+      directive_           VARCHAR2(4000); 
+      contract_            VARCHAR2(100);
+      org_code_            VARCHAR2(100); 
+      site_                VARCHAR2(100); 
+      wo_site_             VARCHAR2(100); 
+      object_id_           VARCHAR2(100);
+      conn_type_           VARCHAR2(100);
+      wo_no_               NUMBER;
+      task_seq_            NUMBER;
+      task_desc_           VARCHAR2(4000); 
+      wo_no_objkey_        VARCHAR2(1000);
+      task_attr_           VARCHAR2(32000);
+      cf_task_attr_        VARCHAR2(32000);
+      task_info_           VARCHAR2(32000);
+      fault_report_name_   VARCHAR2(100);
+         
+      CURSOR Get_Prio1_Details IS
+        select cf$_directive, cf$_wo_site, cf$_site, cf$_maint_org, cf$_object_id, cf$_connection_type, cf$_wo_task_description
+        from C_Fault_Report_Clv 
+        where cf$_user_id = Fnd_Session_API.Get_Fnd_User;
+   
+      CURSOR Get_Object IS
+         select objid, objversion
+         from C_Create_Fault_Report_Clv
+         where cf$_user_message like '%Please Select the Record to Create Fault Report';
+   
+      cursor get_wo_objkey(wo_no_ in number) is
+          SELECT rowkey
+           FROM  active_work_order_tab
+           WHERE wo_no = wo_no_;
+           --AND   rowtype LIKE '%ActiveSeparate';
+   
+   BEGIN
+      
+      IF priority_ = '1' THEN
+         fault_report_name_ := 'Fault Emergency';
+      ELSIF priority_ = '2' THEN
+         fault_report_name_ := 'Fault Urgent';
+      ELSE
+         fault_report_name_ := 'Fault Important';
+      END IF;
+      
+      Client_SYS.Clear_Attr(attr_);
+   
+      OPEN Get_Prio1_Details;
+      FETCH Get_Prio1_Details INTO directive_, wo_site_, site_, org_code_, object_id_, conn_type_, task_desc_;
+      CLOSE Get_Prio1_Details;
+      
+      IF (site_ IS NULL ) THEN
+         site_ := 'US101';
+      END IF;
+      IF ( wo_site_ IS NULL ) THEN
+         wo_site_ := 'US101';
+      END IF;
+      
+      reported_by_ := Person_Info_API.Get_Id_For_User(Fnd_Session_API.Get_Fnd_User);
+   
+      IF conn_type_ NOT IN (Maint_Connection_Type_API.DB_CATEGORY,
+                            Maint_Connection_Type_API.DB_LINAST,
+                            Maint_Connection_Type_API.DB_VIM,
+                            Maint_Connection_Type_API.DB_TOOLEQ) THEN
+         conn_type_ := Maint_Connection_Type_API.DB_EQUIPMENT; 
+      END IF;
+   
+      OPEN Get_Object;
+      FETCH Get_Object INTO cf_objid_, cf_objversion_;
+      CLOSE Get_Object;
+      
+      Client_SYS.Add_To_Attr( 'CONNECTION_TYPE_DB',                 conn_type_,        attr_);
+      Client_SYS.Add_To_Attr( 'REPORTED_BY',                        reported_by_,      attr_);
+      Client_SYS.Add_To_Attr( 'CONTRACT',                           wo_site_,          attr_);
+      Client_SYS.Add_To_Attr( 'ERR_DESCR',                          directive_,        attr_);
+      Client_SYS.Add_To_Attr( 'ORG_CODE',                           org_code_,         attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE',                           object_id_,        attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE_CONTRACT',                  site_,             attr_);
+      Client_SYS.Add_To_Attr( 'PRIORITY_ID',                        priority_,         attr_);  
+      Client_SYS.Add_To_Attr( 'FAULT_REP_FLAG',                     1,                 attr_);  
+      Client_SYS.Add_To_Attr( 'REG_DATE',                           Maintenance_Site_Utility_API.Get_Site_Date( wo_site_), attr_ );
+   
+      Active_Separate_API.New__(info_ , objid_, objversion_, attr_, 'DO');
+      
+      wo_no_ := Client_SYS.Get_Item_Value('WO_NO', attr_);
+      
+      Client_SYS.Clear_Attr(attr_);
+      Client_SYS.Clear_Attr(attr_cf_);
+      Client_sys.ADD_TO_ATTR('CF$_ASSIGNED_STATUS', 'UNASSIGNED', attr_cf_);
+      
+      Active_Separate_CFP.Cf_New__(info_, objid_, attr_cf_, attr_, 'DO');
+      
+      
+      OPEN get_wo_objkey(wo_no_);
+      FETCH get_wo_objkey INTO wo_no_objkey_;
+      CLOSE get_wo_objkey;
+      
+      IF(wo_no_ IS NOT NULL) THEN
+         Jt_Task_API.New_Default_Task(task_seq_, wo_no_, task_desc_);
+      END IF;
+   
+      Client_SYS.Clear_Attr(cf_task_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_C_DEF_TASK',                           'TRUE',          cf_task_attr_);
+      Jt_Task_CFP.Cf_Modify__(task_info_, Jt_Task_API.Get_Objid(task_seq_), cf_task_attr_, task_attr_, 'DO');
+   
+      Client_SYS.Clear_Attr(cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_RESULT',                          fault_report_name_ || ' created. Wo No : '||wo_no_||', Work Task : '||task_seq_,   cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_WO_NO_DB',                           wo_no_objkey_,                                                                     cf_attr_);
+   
+      C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');
+   EXCEPTION 
+      WHEN OTHERS THEN
+         Client_SYS.Clear_Attr(cf_attr_);
+         Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Error occurred while creating ' || fault_report_name_ || '. Error Code : '||SQLCODE||', Error Message : '||SQLERRM,          cf_attr_);
+   
+         C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Create_Fault_Report');
+   Core(priority_);
+END Create_Fault_Report;
+
+
+PROCEDURE Create_Fault_Emergency
+IS
+   
+   PROCEDURE Core
+   IS
+      /*info_                VARCHAR2(32000);
+      objid_               VARCHAR2(1000); 
+      objversion_          VARCHAR2(1000); 
+      attr_                VARCHAR2(32000);
+      cf_info_             VARCHAR2(32000);
+      cf_objid_            VARCHAR2(1000); 
+      cf_objversion_       VARCHAR2(1000); 
+      cf_attr_             VARCHAR2(32000);
+      reported_by_         VARCHAR2(100);
+      directive_           VARCHAR2(4000); 
+      contract_            VARCHAR2(100);
+      org_code_            VARCHAR2(100); 
+      site_                VARCHAR2(100); 
+      wo_site_             VARCHAR2(100); 
+      object_id_           VARCHAR2(100); */
+      priority_            VARCHAR2(10) := '1';
+      /*conn_type_           VARCHAR2(100);
+      wo_no_               NUMBER;
+      task_seq_            NUMBER;
+      task_desc_           VARCHAR2(4000); 
+      wo_no_objkey_        VARCHAR2(1000);
+      task_attr_           VARCHAR2(32000);
+      cf_task_attr_        VARCHAR2(32000);
+      task_info_           VARCHAR2(32000);
+         
+      CURSOR Get_Prio1_Details IS
+        select cf$_directive, cf$_wo_site, cf$_site, cf$_maint_org, cf$_object_id, cf$_connection_type, cf$_wo_task_description
+        from C_Fault_Report_Clv 
+        where cf$_user_id = Fnd_Session_API.Get_Fnd_User;
+   
+      CURSOR Get_Object IS
+         select objid, objversion
+         from C_Create_Fault_Report_Clv
+         where cf$_user_message like '%Please Select the Record to Create Fault Report';
+   
+      cursor get_wo_objkey(wo_no_ in number) is
+          SELECT rowkey
+           FROM  active_work_order_tab
+           WHERE wo_no = wo_no_;
+           --AND   rowtype LIKE '%ActiveSeparate';*/
+   
+   BEGIN
+      
+      Create_Fault_Report(priority_);
+      
+      /*Client_SYS.Clear_Attr(attr_);
+   
+      OPEN Get_Prio1_Details;
+      FETCH Get_Prio1_Details INTO directive_, wo_site_, site_, org_code_, object_id_, conn_type_, task_desc_;
+      CLOSE Get_Prio1_Details;
+   
+      reported_by_ := Person_Info_API.Get_Id_For_User(Fnd_Session_API.Get_Fnd_User);
+   
+      IF conn_type_ NOT IN (Maint_Connection_Type_API.DB_CATEGORY,
+                            Maint_Connection_Type_API.DB_LINAST,
+                            Maint_Connection_Type_API.DB_VIM,
+                            Maint_Connection_Type_API.DB_TOOLEQ) THEN
+         conn_type_ := Maint_Connection_Type_API.DB_EQUIPMENT; 
+      END IF;
+   
+      OPEN Get_Object;
+      FETCH Get_Object INTO cf_objid_, cf_objversion_;
+      CLOSE Get_Object;
+      
+      Client_SYS.Add_To_Attr( 'CONNECTION_TYPE_DB',                 conn_type_,        attr_);
+      Client_SYS.Add_To_Attr( 'REPORTED_BY',                        reported_by_,      attr_);
+      Client_SYS.Add_To_Attr( 'CONTRACT',                           wo_site_,          attr_);
+      Client_SYS.Add_To_Attr( 'ERR_DESCR',                          directive_,        attr_);
+      Client_SYS.Add_To_Attr( 'ORG_CODE',                           org_code_,         attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE',                           object_id_,        attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE_CONTRACT',                  site_,             attr_);
+      Client_SYS.Add_To_Attr( 'PRIORITY_ID',                        priority_,         attr_);  
+      Client_SYS.Add_To_Attr( 'FAULT_REP_FLAG',                     1,                 attr_);  
+      Client_SYS.Add_To_Attr( 'REG_DATE',                           Maintenance_Site_Utility_API.Get_Site_Date( wo_site_), attr_ );
+   
+      Active_Separate_API.New__(info_ , objid_, objversion_, attr_, 'DO');
+      
+      wo_no_ := Client_SYS.Get_Item_Value('WO_NO', attr_);
+      
+      OPEN get_wo_objkey(wo_no_);
+      FETCH get_wo_objkey INTO wo_no_objkey_;
+      CLOSE get_wo_objkey;
+      
+      IF(wo_no_ IS NOT NULL) THEN
+         Jt_Task_API.New_Default_Task(task_seq_, wo_no_, task_desc_);
+      END IF;
+   
+      Client_SYS.Clear_Attr(cf_task_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_C_DEF_TASK',                           'TRUE',          cf_task_attr_);
+      Jt_Task_CFP.Cf_Modify__(task_info_, Jt_Task_API.Get_Objid(task_seq_), cf_task_attr_, task_attr_, 'DO');
+   
+      Client_SYS.Clear_Attr(cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Emergency Fault Report Created. Wo No : '||wo_no_||', Work Task : '||task_seq_,   cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_WO_NO_DB',                           wo_no_objkey_,                                                                     cf_attr_);
+   
+      C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');
+   EXCEPTION 
+      WHEN OTHERS THEN
+         Client_SYS.Clear_Attr(cf_attr_);
+         Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Error occurred while creating Fault Emergency. Error Code : '||SQLCODE||', Error Message : '||SQLERRM,          cf_attr_);
+   
+         C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');*/
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Create_Fault_Emergency');
+   Core;
+END Create_Fault_Emergency;
+
+
+PROCEDURE Create_Fault_Urgent
+IS
+   
+   PROCEDURE Core
+   IS
+      /*info_                VARCHAR2(32000);
+      objid_               VARCHAR2(1000); 
+      objversion_          VARCHAR2(1000); 
+      attr_                VARCHAR2(32000);
+      cf_info_             VARCHAR2(32000);
+      cf_objid_            VARCHAR2(1000); 
+      cf_objversion_       VARCHAR2(1000); 
+      cf_attr_             VARCHAR2(32000);
+      reported_by_         VARCHAR2(100);
+      directive_           VARCHAR2(4000); 
+      contract_            VARCHAR2(100);
+      org_code_            VARCHAR2(100); 
+      site_                VARCHAR2(100); 
+      wo_site_             VARCHAR2(100); 
+      object_id_           VARCHAR2(100); */
+      priority_            VARCHAR2(10) := '2';
+      /*conn_type_           VARCHAR2(100);
+      wo_no_               NUMBER;
+      task_seq_            NUMBER;
+      task_desc_           VARCHAR2(4000); 
+      wo_no_objkey_        VARCHAR2(1000);
+      task_attr_           VARCHAR2(32000);
+      cf_task_attr_        VARCHAR2(32000);
+      task_info_           VARCHAR2(32000);
+   
+      CURSOR Get_Prio1_Details IS
+        select cf$_directive, cf$_wo_site, cf$_site, cf$_maint_org, cf$_object_id, cf$_connection_type, cf$_wo_task_description
+        from C_Fault_Report_Clv 
+        where cf$_user_id = Fnd_Session_API.Get_Fnd_User;
+   
+      CURSOR Get_Object IS
+         select objid, objversion
+         from C_Create_Fault_Report_Clv
+         where cf$_user_message like '%Please Select the Record to Create Fault Report';
+   
+      cursor get_wo_objkey(wo_no_ in number) is
+          SELECT rowkey
+           FROM  active_work_order_tab
+           WHERE wo_no = wo_no_;*/
+         
+   BEGIN
+      
+      Create_Fault_Report(priority_);
+      
+      /*Client_SYS.Clear_Attr(attr_);
+   
+      OPEN Get_Prio1_Details;
+      FETCH Get_Prio1_Details INTO directive_, wo_site_, site_, org_code_, object_id_, conn_type_, task_desc_;
+      CLOSE Get_Prio1_Details;
+   
+      reported_by_ := Person_Info_API.Get_Id_For_User(Fnd_Session_API.Get_Fnd_User);
+   
+      IF conn_type_ NOT IN (Maint_Connection_Type_API.DB_CATEGORY,
+                            Maint_Connection_Type_API.DB_LINAST,
+                            Maint_Connection_Type_API.DB_VIM,
+                            Maint_Connection_Type_API.DB_TOOLEQ) THEN
+         conn_type_ := Maint_Connection_Type_API.DB_EQUIPMENT; 
+      END IF;
+   
+      OPEN Get_Object;
+      FETCH Get_Object INTO cf_objid_, cf_objversion_;
+      CLOSE Get_Object;
+      
+      Client_SYS.Add_To_Attr( 'CONNECTION_TYPE_DB',                 conn_type_,        attr_);
+      Client_SYS.Add_To_Attr( 'REPORTED_BY',                        reported_by_,      attr_);
+      Client_SYS.Add_To_Attr( 'CONTRACT',                           wo_site_,          attr_);
+      Client_SYS.Add_To_Attr( 'ERR_DESCR',                          directive_,        attr_);
+      Client_SYS.Add_To_Attr( 'ORG_CODE',                           org_code_,         attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE',                           object_id_,        attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE_CONTRACT',                  site_,             attr_);
+      Client_SYS.Add_To_Attr( 'PRIORITY_ID',                        priority_,         attr_);  
+      Client_SYS.Add_To_Attr( 'FAULT_REP_FLAG',                     1,                 attr_);  
+      Client_SYS.Add_To_Attr( 'REG_DATE',                           Maintenance_Site_Utility_API.Get_Site_Date( wo_site_), attr_ );
+   
+      Active_Separate_API.New__(info_ , objid_, objversion_, attr_, 'DO');
+      
+      
+   
+      wo_no_ := Client_SYS.Get_Item_Value('WO_NO', attr_);
+   
+      IF(wo_no_ IS NOT NULL) THEN
+         Jt_Task_API.New_Default_Task(task_seq_, wo_no_, task_desc_);
+      END IF;
+   
+      Client_SYS.Clear_Attr(cf_task_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_C_DEF_TASK',                           'TRUE',          cf_task_attr_);
+      Jt_Task_CFP.Cf_Modify__(task_info_, Jt_Task_API.Get_Objid(task_seq_), cf_task_attr_, task_attr_, 'DO');
+      
+      OPEN get_wo_objkey(wo_no_);
+      FETCH get_wo_objkey INTO wo_no_objkey_;
+      CLOSE get_wo_objkey;
+   
+      Client_SYS.Clear_Attr(cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Urgent Fault Report Created. Wo No : '||wo_no_||', Work Task : '||task_seq_,      cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_WO_NO',                           wo_no_objkey_,                                                                     cf_attr_);
+   
+      C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');
+   
+   EXCEPTION 
+      WHEN OTHERS THEN
+         Client_SYS.Clear_Attr(cf_attr_);
+         Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Error occurred while creating Fault Urgent. Error Code : '||SQLCODE||', Error Message : '||SQLERRM,          cf_attr_);
+   
+         C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');*/
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Create_Fault_Urgent');
+   Core;
+END Create_Fault_Urgent;
+
+
+PROCEDURE Create_Fault_Important
+IS
+   
+   PROCEDURE Core
+   IS
+      /*info_                VARCHAR2(32000);
+      objid_               VARCHAR2(1000); 
+      objversion_          VARCHAR2(1000); 
+      attr_                VARCHAR2(32000);
+      cf_info_             VARCHAR2(32000);
+      cf_objid_            VARCHAR2(1000); 
+      cf_objversion_       VARCHAR2(1000); 
+      cf_attr_             VARCHAR2(32000);
+      reported_by_         VARCHAR2(100);
+      directive_           VARCHAR2(4000); 
+      contract_            VARCHAR2(100);
+      org_code_            VARCHAR2(100); 
+      site_                VARCHAR2(100); 
+      wo_site_             VARCHAR2(100); 
+      object_id_           VARCHAR2(100);*/ 
+      priority_            VARCHAR2(10) := '3';
+      /*conn_type_           VARCHAR2(100);
+      wo_no_               NUMBER;
+      task_seq_            NUMBER;
+      task_desc_           VARCHAR2(4000); 
+      wo_no_objkey_        VARCHAR2(1000);
+      task_attr_           VARCHAR2(32000);
+      cf_task_attr_        VARCHAR2(32000);
+      task_info_           VARCHAR2(32000);
+   
+      CURSOR Get_Prio1_Details IS
+        select cf$_directive, cf$_wo_site, cf$_site, cf$_maint_org, cf$_object_id, cf$_connection_type, cf$_wo_task_description
+        from C_Fault_Report_Clv 
+        where cf$_user_id = Fnd_Session_API.Get_Fnd_User;
+   
+      CURSOR Get_Object IS
+         select objid, objversion
+         from C_Create_Fault_Report_Clv
+         where cf$_user_message like '%Please Select the Record to Create Fault Report';
+   
+      cursor get_wo_objkey(wo_no_ in number) is
+          SELECT rowkey
+           FROM  active_work_order_tab
+           WHERE wo_no = wo_no_;*/
+         
+   BEGIN
+      
+      Create_Fault_Report(priority_);
+      
+      /*Client_SYS.Clear_Attr(attr_);
+   
+      OPEN Get_Prio1_Details;
+      FETCH Get_Prio1_Details INTO directive_, wo_site_, site_, org_code_, object_id_, conn_type_, task_desc_;
+      CLOSE Get_Prio1_Details;
+   
+      reported_by_ := Person_Info_API.Get_Id_For_User(Fnd_Session_API.Get_Fnd_User);
+   
+      IF conn_type_ NOT IN (Maint_Connection_Type_API.DB_CATEGORY,
+                            Maint_Connection_Type_API.DB_LINAST,
+                            Maint_Connection_Type_API.DB_VIM,
+                            Maint_Connection_Type_API.DB_TOOLEQ) THEN
+         conn_type_ := Maint_Connection_Type_API.DB_EQUIPMENT; 
+      END IF;
+      
+      OPEN Get_Object;
+      FETCH Get_Object INTO cf_objid_, cf_objversion_;
+      CLOSE Get_Object;
+   
+      Client_SYS.Add_To_Attr( 'CONNECTION_TYPE_DB',                 conn_type_,        attr_);
+      Client_SYS.Add_To_Attr( 'REPORTED_BY',                        reported_by_,      attr_);
+      Client_SYS.Add_To_Attr( 'CONTRACT',                           wo_site_,          attr_);
+      Client_SYS.Add_To_Attr( 'ERR_DESCR',                          directive_,        attr_);
+      Client_SYS.Add_To_Attr( 'ORG_CODE',                           org_code_,         attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE',                           object_id_,        attr_);
+      Client_SYS.Add_To_Attr( 'MCH_CODE_CONTRACT',                  site_,             attr_);
+      Client_SYS.Add_To_Attr( 'PRIORITY_ID',                        priority_,         attr_);  
+      Client_SYS.Add_To_Attr( 'FAULT_REP_FLAG',                     1,                 attr_);  
+      Client_SYS.Add_To_Attr( 'REG_DATE',                           Maintenance_Site_Utility_API.Get_Site_Date( wo_site_), attr_ );
+   
+      Active_Separate_API.New__(info_ , objid_, objversion_, attr_, 'DO');
+   
+      wo_no_ := Client_SYS.Get_Item_Value('WO_NO', attr_);
+      
+      
+   
+      IF(wo_no_ IS NOT NULL) THEN
+         Jt_Task_API.New_Default_Task(task_seq_, wo_no_, task_desc_);
+      END IF;
+   
+      Client_SYS.Clear_Attr(cf_task_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_C_DEF_TASK',                           'TRUE',          cf_task_attr_);
+      Jt_Task_CFP.Cf_Modify__(task_info_, Jt_Task_API.Get_Objid(task_seq_), cf_task_attr_, task_attr_, 'DO');
+   
+      OPEN get_wo_objkey(wo_no_);
+      FETCH get_wo_objkey INTO wo_no_objkey_;
+      CLOSE get_wo_objkey;
+   
+      Client_SYS.Clear_Attr(cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Important Fault Report Created. Wo No : '||wo_no_||', Work Task : '||task_seq_,   cf_attr_);
+      Client_SYS.Add_To_Attr( 'CF$_WO_NO',                           wo_no_objkey_,                                                                     cf_attr_);
+   
+      C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');
+   
+   EXCEPTION 
+      WHEN OTHERS THEN
+         Client_SYS.Clear_Attr(cf_attr_);
+         Client_SYS.Add_To_Attr( 'CF$_RESULT',                          'Error occurred while creating Fault Important. Error Code : '||SQLCODE||', Error Message : '||SQLERRM,          cf_attr_);
+   
+         C_Create_Fault_Report_Clp.Modify__( cf_info_, cf_objid_, cf_objversion_, cf_attr_, 'DO');*/
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Create_Fault_Important');
+   Core;
+END Create_Fault_Important;
+
+
+PROCEDURE Assign_Resource(
+    wo_no_ NUMBER,
+    resource_id_ VARCHAR2)
+IS
+   
+   PROCEDURE Core(
+       wo_no_ NUMBER,
+       resource_id_ VARCHAR2)
+   IS
+      parent_exists_ BOOLEAN;
+      task_seq_ NUMBER;
+      resource_parent_seq_ NUMBER;
+      prepare_attr_ VARCHAR2(32000);
+      info_ VARCHAR2(32000);
+      do_attr_ VARCHAR2(32000);
+      objid_ JT_TASK_RESOURCE.objid%TYPE;
+      objversion_ JT_TASK_RESOURCE.objversion%TYPE;
+      ref_resource_id_ VARCHAR2(100);
+      current_resource_ VARCHAR2(100);
+      change_resource_  VARCHAR2(5);
+      action_           VARCHAR2(6); 
+      wo_objid_ ACTIVE_SEPARATE_OVERVIEW_CFV.objid%TYPE;
+      wo_objversion_ ACTIVE_SEPARATE_OVERVIEW_CFV.objversion%TYPE;
+      wo_attr_ VARCHAR2(32000);
+   
+      CURSOR get_object_val IS
+      SELECT objid, objversion
+      FROM JT_TASK_RESOURCE t
+      WHERE task_seq IN (SELECT task_seq
+                     FROM JT_TASK_CFV V
+                    WHERE V.WO_NO = wo_no_
+                      and V.CF$_C_DEF_TASK = 'TRUE');  
+   
+      CURSOR get_assignee_info IS
+      SELECT v.CF$_ASSIGNED_RESOURCE, v.CF$_CHANGE_ASSIGNEE
+      FROM ACTIVE_SEPARATE_OVERVIEW_CFV V
+      WHERE V.WO_NO = wo_no_;
+   
+      CURSOR get_wo_task_no IS
+      SELECT task_seq
+      FROM JT_TASK_CFV V
+      WHERE V.WO_NO = wo_no_
+      and V.CF$_C_DEF_TASK = 'TRUE';
+   
+      CURSOR get_resource_parent_seq IS
+      SELECT Resource_parent_seq
+      FROM Resource_Parent_Person_Uiv
+      WHERE Resource_Id = ref_resource_id_;
+      
+      CURSOR get_wo_obj_info IS
+      SELECT objid, objversion
+      FROM ACTIVE_SEPARATE_OVERVIEW_CFV
+      WHERE WO_NO = wo_no_;
+   
+    BEGIN
+      parent_exists_ := FALSE;
+      
+      OPEN get_wo_obj_info;
+      FETCH get_wo_obj_info INTO wo_objid_, wo_objversion_;
+      CLOSE get_wo_obj_info;
+      
+      IF resource_id_ IS NULL THEN
+        ERROR_SYS.Record_General(lu_name_, ': There is no resource connected to Work Order - ' || wo_no_ || '. Please add a resource before you proceed.');
+      END IF;
+   
+      ref_resource_id_ := Active_Separate_Cfp.Ref_Cf$_Resource(resource_id_);
+   
+      OPEN get_assignee_info;
+      FETCH get_assignee_info into current_resource_, change_resource_;
+      CLOSE get_assignee_info;
+   
+      IF ( current_resource_ = ''  OR current_resource_ is null) THEN
+        action_ := 'NEW';
+      ELSE  
+        IF ( current_resource_ = ref_resource_id_) THEN
+           ERROR_SYS.Record_General(lu_name_, ': Resource ' || current_resource_ || ' is already connected to Work Order - ' || wo_no_ || '.');
+        ELSE
+          IF ( change_resource_ = 'False')  THEN
+            ERROR_SYS.Record_General(lu_name_, ': Resource ' || current_resource_ || ' is already connected to Work Order - ' || wo_no_ || '. Please set Change Assignee value to modify the resource.');
+          END IF;
+          action_ := 'UPDATE';
+        END IF;
+      END IF;  
+   
+   
+      FOR resource_parent_seq_ IN get_resource_parent_seq
+      LOOP
+        IF (Resource_Util_API.Get_Resource_Id(resource_parent_seq_.Resource_parent_seq) = 'PARAGON-MAINT') THEN
+           parent_exists_ := TRUE;
+        END IF;
+      END LOOP;
+   
+      IF (NOT parent_exists_) THEN
+        ERROR_SYS.Record_General(lu_name_, ': Resource - ' || ref_resource_id_ || ' is not connected to Resource Group - PARAGON-MAINT. Please connect the resource to PARAGON-MAINT before proceed.');
+      END IF;
+   
+   
+   
+      OPEN get_wo_task_no;
+      FETCH get_wo_task_no INTO task_seq_;
+      CLOSE get_wo_task_no;
+   
+      IF task_seq_ IS NULL THEN
+        ERROR_SYS.Record_General(lu_name_, ': There is no Work task not created for the selected work order- ' || wo_no_ ||'. Please create a work task before proceed.');
+      END IF;
+   
+      IF ( action_ = 'UPDATE' ) THEN
+         OPEN get_object_val;
+         FETCH get_object_val INTO objid_, objversion_;
+         CLOSE get_object_val;
+   
+         JT_TASK_RESOURCE_API.REMOVE__(info_, objid_, objversion_, 'DO');
+         objid_ := '';
+         objversion_ := '';
+         action_ := 'NEW';
+      END IF;
+   
+   
+      IF ( action_ = 'NEW') THEN
+        Client_sys.Clear_Attr(prepare_attr_);
+        Client_sys.ADD_TO_ATTR('TASK_SEQ', task_seq_, prepare_attr_);
+   
+        JT_TASK_RESOURCE_API.NEW__(info_, objid_, objversion_, prepare_attr_, 'PREPARE');
+   
+        Client_sys.Clear_Attr(do_attr_);
+        Client_sys.ADD_TO_ATTR('TASK_SEQ', task_seq_, do_attr_);
+        Client_sys.ADD_TO_ATTR('DEMAND_TYPE', Client_sys.Get_Item_Value('DEMAND_TYPE', prepare_attr_), do_attr_);
+        Client_sys.ADD_TO_ATTR('RESOURCE_GROUP', 'PARAGON-MAINT', do_attr_);
+        Client_sys.ADD_TO_ATTR('RESOURCE_GROUP_SEQ', resource_parent_seq_, do_attr_);
+        Client_sys.ADD_TO_ATTR('RESOURCE_ID', ref_resource_id_, do_attr_);
+        Client_sys.ADD_TO_ATTR('RESOURCE_SEQ', Resource_Util_API.Get_Resource_Seq(resource_id_, 'PERSON'), do_attr_);
+        Client_sys.ADD_TO_ATTR('WO_NO', wo_no_, do_attr_);
+        Client_sys.ADD_TO_ATTR('PLANNED_HOURS', Client_sys.Get_Item_Value('PLANNED_HOURS', prepare_attr_), do_attr_);
+        Client_sys.ADD_TO_ATTR('SOURCING_OPTION', Client_sys.Get_Item_Value('SOURCING_OPTION', prepare_attr_), do_attr_);
+        Client_sys.ADD_TO_ATTR('OFFSET', Client_sys.Get_Item_Value('OFFSET', prepare_attr_), do_attr_);
+        Client_sys.ADD_TO_ATTR('CATALOG_CONTRACT', Client_sys.Get_Item_Value('CATALOG_CONTRACT', prepare_attr_), do_attr_);
+   
+        JT_TASK_RESOURCE_API.NEW__(info_, objid_, objversion_, do_attr_, 'DO');
+        
+        
+        
+        Active_Separate_API.Prepare__(info_, wo_objid_, wo_objversion_, wo_attr_, 'DO');
+        JT_TASK_API.Set_Release(task_seq_);
+        
+        Assign_Work(task_seq_);
+        
+        OPEN get_wo_obj_info;
+        FETCH get_wo_obj_info INTO wo_objid_, wo_objversion_;
+        CLOSE get_wo_obj_info;
+        
+        info_ := 'Resorce ' || ref_resource_id_ || ' assigned to Work Order ' || wo_no_;
+        
+        Client_sys.Clear_Attr(wo_attr_);
+        Client_sys.Clear_Attr(do_attr_);
+        Client_sys.ADD_TO_ATTR('CF$_ASSIGNED_MSG', info_, wo_attr_);
+        Client_sys.ADD_TO_ATTR('CF$_ASSIGNED_STATUS', 'ASSIGNED', wo_attr_);
+        
+        ACTIVE_SEPARATE_CFP.Cf_Modify__(info_, wo_objid_, wo_attr_, do_attr_, 'DO');
+        
+        
+        info_ := 'Resorce ' || ref_resource_id_ || ' assigned to Work Order ' || wo_no_;
+   
+      END IF;
+   EXCEPTION 
+      WHEN OTHERS THEN
+         
+        info_ := 'Resorce ' || ref_resource_id_ || ' allocation failed due to ' || SQLERRM;  
+        Client_sys.Clear_Attr(wo_attr_);
+        Client_sys.Clear_Attr(do_attr_);
+        Client_sys.ADD_TO_ATTR('CF$_ASSIGNED_MSG', info_, wo_attr_);
+        Client_sys.ADD_TO_ATTR('CF$_ASSIGNED_STATUS', 'ASSIGN FAILED', wo_attr_);
+        
+        DBMS_OUTPUT.PUT_LINE(wo_objid_);
+        
+        ACTIVE_SEPARATE_CFP.Cf_Modify__(info_, wo_objid_, wo_attr_, do_attr_, 'DO');
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Assign_Resource');
+   Core(wo_no_, resource_id_);
+END Assign_Resource;
+
+
+PROCEDURE Create_Work_Task (
+    wo_no_        IN NUMBER,
+    description_  IN VARCHAR2, 
+    site_         IN VARCHAR2, 
+    act_start_    IN DATE,
+    act_finish_   IN DATE,
+    obj_id_       IN VARCHAR2, 
+    priority_     IN VARCHAR2,
+    action_id_    IN VARCHAR2,
+    action_taken_ IN VARCHAR2, 
+    cause_        IN VARCHAR2)
+IS
+   
+   PROCEDURE Core (
+       wo_no_        IN NUMBER,
+       description_  IN VARCHAR2, 
+       site_         IN VARCHAR2, 
+       act_start_    IN DATE,
+       act_finish_   IN DATE,
+       obj_id_       IN VARCHAR2, 
+       priority_     IN VARCHAR2,
+       action_id_    IN VARCHAR2,
+       action_taken_ IN VARCHAR2, 
+       cause_        IN VARCHAR2)
+   IS
+      /*active_separate_rec_        Active_Work_Order_API.Public_Rec;
+      actual_obj_lu_name_         VARCHAR2(200);
+      actual_obj_lu_name_db_      jt_task_tab.actual_obj_conn_lu_name%TYPE;
+      actual_obj_rowkey_          jt_task_tab.actual_obj_conn_rowkey%TYPE;
+      actual_obj_description_     Equipment_Object_Tab.mch_name%TYPE;*/
+      info_                       VARCHAR2(32000);
+      objid_                      VARCHAR2(1000);
+      objversion_                 VARCHAR2(1000);
+      attr_                       VARCHAR2(32000);
+      per_act_id_                 VARCHAR2(100); 
+      cause_id_                   VARCHAR2(100); 
+      task_seq_                   NUMBER;
+      cf_objkey_                  VARCHAR2(1000);
+      cf_objversion_              VARCHAR2(1000);
+      cf_info_                    VARCHAR2(32000);
+      cf_attr_                    VARCHAR2(32000);
+      order_count_                NUMBER;
+      object_id_rowkey_           VARCHAR2(1000);
+      new_site_                   VARCHAR2(25);  
+   
+      CURSOR Get_Action_Id(act_val_ VARCHAR2) IS
+         SELECT PERFORMED_ACTION_ID
+         FROM MAINTENANCE_PERF_ACTION
+         WHERE PERFORMED_ACTION_ID ||' - '||DESCRIPTION = act_val_;
+   
+      CURSOR Get_Cause_Id(cause_val_ VARCHAR2) IS
+         SELECT ERR_CAUSE
+         FROM MAINTENANCE_CAUSE_CODE
+         WHERE ERR_CAUSE || ' - ' || DESCRIPTION = cause_val_;    
+   
+      CURSOR Count_Order IS 
+         SELECT COUNT(*)
+           FROM C_Create_Work_Task_Clv
+           WHERE cf$_wo_no = wo_no_;
+   
+      CURSOR Check_Order_Exists IS 
+         SELECT objkey, objversion
+           FROM C_Create_Work_Task_Clv
+           WHERE cf$_wo_no = wo_no_
+           AND cf$_work_task IS NULL ;
+   
+      CURSOR Get_Object_Rowkey IS 
+         SELECT rowkey
+           FROM  equipment_object_tab
+           WHERE mch_code = obj_id_
+           AND   rowtype LIKE '%EquipmentFunctional';
+             
+   BEGIN
+      --Error_sys.Appl_General(lu_name_, 'TEST: Action_Id_ : '||Action_Id_||', Cause_ : '||Cause_);
+     /*active_separate_rec_ :=  Active_Work_Order_API.Get(200159);
+     Jt_Object_Conn_Utility_API.Get_Rowkey_By_Object_Data(   actual_obj_lu_name_,
+                                                             actual_obj_lu_name_db_,
+                                                             actual_obj_rowkey_,
+                                                             actual_obj_description_,
+                                                             active_separate_rec_.connection_type,
+                                                             active_separate_rec_.mch_code_contract,
+                                                             active_separate_rec_.mch_code);*/
+      IF ( site_ IS NULL) THEN
+         new_site_ := 'US101';
+      ELSE
+         new_site_ := site_;
+      END IF;
+      
+      
+      Client_SYS.Clear_Attr(attr_);
+      Jt_Task_API.New__ ( info_, objid_, objversion_, attr_, 'PREPARE');
+   
+      OPEN Get_Action_Id(action_id_);
+      FETCH Get_Action_Id INTO per_act_id_;
+      CLOSE Get_Action_Id;
+   
+      OPEN Get_Cause_Id(cause_);
+      FETCH Get_Cause_Id INTO cause_id_;
+      CLOSE Get_Cause_Id;
+      
+      Client_SYS.Add_To_Attr('WO_NO',                      wo_no_,                                                              attr_);
+      Client_SYS.Add_To_Attr('ORDER_NO',                   '',                                                                  attr_);
+      Client_SYS.Add_To_Attr('DESCRIPTION',                description_,                                                        attr_);
+      Client_SYS.Add_To_Attr('SITE',                       new_site_,                                                               attr_);
+      Client_SYS.Add_To_Attr('ACTUAL_START',               act_start_,                                                          attr_);
+      Client_SYS.Add_To_Attr('ACTUAL_FINISH',              act_finish_,                                                         attr_);
+      Client_SYS.Add_To_Attr('ACTUAL_OBJECT_ID',           obj_id_,                                                             attr_);
+      Client_SYS.Add_To_Attr('PRIORITY_ID',                priority_,                                                           attr_);
+      Client_SYS.Add_To_Attr('PERFORMED_ACTION_ID',        per_act_id_,                                                         attr_);         
+      Client_SYS.Add_To_Attr('ACTION_TAKEN',               action_taken_,                                                       attr_);
+      Client_SYS.Add_To_Attr('MAINTENANCE_CAUSE_CODE ',    cause_id_,                                                           attr_);
+      Client_SYS.Add_To_Attr('ORGANIZATION_ID',            Work_Order_API.Get_Org_Code(wo_no_),                                 attr_);
+      Client_SYS.Add_To_Attr('ORGANIZATION_SITE',          Organization_API.Get_Contract(Work_Order_API.Get_Org_Code(wo_no_)),  attr_);
+   
+      Jt_Task_API.New__ ( info_, objid_, objversion_, attr_, 'DO');
+   
+      task_seq_ := Client_SYS.Get_Item_Value('TASK_SEQ', attr_);
+   
+      OPEN Count_Order;
+      FETCH Count_Order INTO order_count_;
+      CLOSE Count_Order;
+   
+      OPEN Check_Order_Exists;
+      FETCH Check_Order_Exists INTO cf_objkey_, cf_objversion_;
+      CLOSE Check_Order_Exists;
+   
+      OPEN Get_Object_Rowkey;
+      FETCH Get_Object_Rowkey INTO object_id_rowkey_;
+      CLOSE Get_Object_Rowkey;
+   
+      IF(order_count_ = 1 AND cf_objkey_ IS NOT NULL AND task_seq_ IS NOT NULL) THEN 
+         Client_SYS.Clear_Attr(cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_WORK_TASK',   Jt_Task_API.Get_Objkey(task_seq_),    cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_SITE',        User_Allowed_Site_API.Get_Objkey(Fnd_Session_API.Get_Fnd_User, new_site_),  cf_attr_);   
+         C_Create_Work_Task_Clp.Modify__(cf_info_, cf_objkey_, cf_objversion_, cf_attr_, 'DO');
+      ELSE
+         Client_SYS.Clear_Attr(cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_WO_NO',            Active_Separate_API.Get_Objkey(wo_no_),                                 cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_WORK_TASK',        Jt_Task_API.Get_Objkey(task_seq_),                                      cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_DESCRIPTION',      description_,                                                           cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_SITE',             User_Allowed_Site_API.Get_Objkey(Fnd_Session_API.Get_Fnd_User, new_site_),  cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_OBJECT_ID',        object_id_rowkey_,                                                      cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_PRIORITY',         Maintenance_Priority_API.Get_Objkey(priority_),                         cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_PERFORMED_ACTION', Maintenance_Perf_Action_API.Get_Objkey(per_act_id_),                    cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_ACTION_TAKEN',     action_taken_,                                                          cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_CAUSE',            Maintenance_Cause_Code_API.Get_Objkey(cause_id_),                       cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_ACTUAL_START',     act_start_,                                                             cf_attr_);
+         Client_SYS.Add_To_Attr('CF$_ACTUAL_FINISH',    act_finish_,                                                            cf_attr_);
+   
+         C_Create_Work_Task_Clp.New__(cf_info_, cf_objkey_, cf_objversion_, cf_attr_, 'DO');
+      END IF;
+          --Jt_Task_API.Update_Actual_Finish_Date(task_seq_, act_finish_);
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Create_Work_Task');
+   Core(wo_no_, description_, site_, act_start_, act_finish_, obj_id_, priority_, action_id_, action_taken_, cause_);
+END Create_Work_Task;
+
+
+PROCEDURE Create_Work_Task_New (
+   objkey_ VARCHAR2)
+IS
+   
+   PROCEDURE Core (
+      objkey_ VARCHAR2)
+   IS
+      all_info_rec_ C_CREATE_WORK_TASK_CLV%ROWTYPE;
+      
+      CURSOR get_all_info IS
+      SELECT * 
+      FROM C_CREATE_WORK_TASK_CLV
+      WHERE OBJKEY = objkey_;
+   BEGIN
+      
+      OPEN get_all_info;
+      FETCH get_all_info INTO all_info_rec_;
+      CLOSE get_all_info;
+      
+      Create_Work_Task(
+                  all_info_rec_.CF$_WO_NO,
+                  all_info_rec_.CF$_DESCRIPTION,
+                  all_info_rec_.CF$_SITE,
+                  all_info_rec_.CF$_ACTUAL_START,
+                  all_info_rec_.CF$_ACTUAL_FINISH,
+                  all_info_rec_.CF$_OBJECT_ID,
+                  all_info_rec_.CF$_PRIORITY,
+                  all_info_rec_.CF$_PERFORMED_ACTION,
+                  all_info_rec_.CF$_ACTION_TAKEN,
+                  all_info_rec_.CF$_CAUSE );
+                  
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Create_Work_Task_New');
+   Core(objkey_);
+END Create_Work_Task_New;
+
+
+PROCEDURE Finish_Work_Task(
+   objkey_ VARCHAR2)
+IS
+   
+   PROCEDURE Core(
+      objkey_ VARCHAR2)
+   IS
+      task_seq_     NUMBER;
+      
+      CURSOR get_task_seq IS
+      SELECT CF$_Work_Task
+      FROM C_CREATE_WORK_TASK_CLV
+      WHERE OBJKEY = objkey_;
+   BEGIN
+      
+      OPEN get_task_seq;
+      FETCH get_task_seq INTO task_seq_;
+      CLOSE get_task_seq;
+      
+      JT_TASK_API.Set_Work_Done(task_seq_);
+      JT_TASK_API.Set_Finished(task_seq_);
+      
+                  
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Finish_Work_Task');
+   Core(objkey_);
+END Finish_Work_Task;
+
+
+PROCEDURE Assign_Work(
+   objkey_ VARCHAR2)
+IS
+   
+   PROCEDURE Core(
+      objkey_ VARCHAR2)
+   IS
+     task_seq_       NUMBER;
+     resource_seq_   NUMBER;
+     resource_id_    RESOURCE_TAB.resource_id%TYPE;  
+     attr_           VARCHAR2(32000);
+     info_           VARCHAR2(2000);
+     objid_          JT_EXECUTION_INSTANCE.objid%TYPE;
+     objversion_     JT_EXECUTION_INSTANCE.objid%TYPE;
+     
+     CURSOR get_task_seq IS
+     SELECT task_seq 
+     FROM JT_TASK
+     WHERE task_seq = objkey_;
+     
+     CURSOR get_task_resource_seq IS
+     SELECT resource_seq
+     FROM jt_task_resource 
+     WHERE task_seq = task_seq_;
+     
+   BEGIN
+     
+     OPEN get_task_seq;
+     FETCH get_task_seq INTO task_seq_;
+     CLOSE get_task_seq;
+     
+     OPEN get_task_resource_seq;
+     FETCH get_task_resource_seq INTO resource_seq_;
+     CLOSE get_task_resource_seq;
+     
+     resource_id_ := Resource_Util_API.Get_Resource_Id(resource_seq_);
+     
+     Client_SYS.Clear_Attr(attr_);
+     
+     Client_SYS.Add_To_Attr('RESOURCE_TYPE', 'Person', attr_);
+     Client_SYS.Add_To_Attr('RESOURCE_SEQ', resource_seq_, attr_);
+     Client_SYS.Add_To_Attr('TASK_SEQ', task_seq_, attr_);
+     Client_SYS.Add_To_Attr('RESOURCE_ID', resource_id_, attr_);
+     Client_SYS.Add_To_Attr('ALLOCATED_START', sysdate, attr_);
+     Client_SYS.Add_To_Attr('ALLOCATED_FINISH', sysdate+(3/24), attr_);
+     
+     JT_EXECUTION_INSTANCE_API.NEW__(info_, objid_, objversion_, attr_, 'DO');
+     
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Assign_Work');
+   Core(objkey_);
+END Assign_Work;
+
+
+PROCEDURE Complete_Work_Task(
+   task_seq_ NUMBER)
+IS
+   
+   PROCEDURE Core(
+      task_seq_ NUMBER)
+   IS
+      temp_ NUMBER;
+   
+      CURSOR get_task_assignments IS
+      SELECT COUNT(*) 
+      FROM Jt_Execution_Instance_tab t
+      WHERE t.task_seq = task_seq_ 
+      AND ROWSTATE <> 'COMPLETED';
+   BEGIN
+      temp_ := 0;
+      OPEN  get_task_assignments;
+      FETCH get_task_assignments INTO temp_ ;
+      CLOSE get_task_assignments ;
+   
+       IF ( temp_ = 0 ) THEN
+           JT_TASK_API.Set_Work_Done(task_seq_);
+           JT_TASK_API.Set_Finished(task_seq_);
+       ELSE 
+          Error_sys.System_General('There are another ' || temp_ || ' work assignments to be completed before closing the task');
+      END IF;
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Complete_Work_Task');
+   Core(task_seq_);
+END Complete_Work_Task;
+
+
+PROCEDURE Complete_Work_Task_Bg(
+   attr_ VARCHAR2)
+IS
+   
+   PROCEDURE Core(
+      attr_ VARCHAR2)
+   IS
+      task_seq_ NUMBER;
+   
+   BEGIN
+      task_seq_ := Client_Sys.Get_Item_Value('TASK_SEQ', attr_);
+      Complete_Work_Task(task_seq_);
+   END Core;
+
+BEGIN
+   General_SYS.Init_Method(C_Culligan_Util_API.lu_name_, 'C_Culligan_Util_API', 'Complete_Work_Task_Bg');
+   Core(attr_);
+END Complete_Work_Task_Bg;
+
+-----------------------------------------------------------------------------
+-------------------- FOUNDATION1 METHODS ------------------------------------
+-----------------------------------------------------------------------------
+
+
+--@IgnoreMissingSysinit
+PROCEDURE Init
+IS
+   
+   PROCEDURE Base
+   IS
+   BEGIN
+      NULL;
+   END Base;
+
+BEGIN
+   Base;
+END Init;
+
+BEGIN
+   Init;
+END C_Culligan_Util_API;
+-- [END IFS COMPLETE BLOCK]
+/
+SHOW ERROR
+
+GRANT EXECUTE ON C_Culligan_Util_API TO IFSSYS
+/
